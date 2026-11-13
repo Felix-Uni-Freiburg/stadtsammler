@@ -8,7 +8,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var nf = new Intl.NumberFormat("de-DE");
   var APP_VERSION = "dev";
-  try { APP_VERSION = new URL(document.currentScript.src).searchParams.get("v") || "dev"; } catch (e) { /* dev */ }
+  try { APP_VERSION = document.querySelector('meta[name="app-version"]').content || "dev"; } catch (e) { /* dev */ }
 
   /* ---------- Daten ---------- */
   var KEY = "stadtsammler-v1";
@@ -130,7 +130,12 @@
       } }
   ];
   BADGES.forEach(function (b) { if (b.cities && !b.fn) b.fn = setBadge(b.cities); });
-  BADGES.forEach(function (b) { (b.cities || []).forEach(function (id) { if (!BY_ID[id]) throw new Error("Unbekannte Stadt in Erfolg " + b.id + ": " + id); }); });
+  // Unbekannte Städte überspringen statt abzustürzen (z. B. falls Daten und Code kurz nicht zusammenpassen)
+  BADGES.forEach(function (b) {
+    if (!b.cities) return;
+    var ok = b.cities.filter(function (id) { return BY_ID[id]; });
+    if (ok.length !== b.cities.length) { console.warn("Erfolg " + b.id + ": unbekannte Städte übersprungen"); b.cities = ok; b.fn = setBadge(ok); }
+  });
   function badgesFor(id) { return BADGES.filter(function (b) { return b.cities && b.cities.indexOf(id) >= 0; }); }
   function doneBadges() {
     return BADGES.filter(function (b) { var p = b.fn(); return p[0] >= p[1]; }).map(function (b) { return b.id; });
