@@ -548,7 +548,7 @@
   var standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
   if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone) $("iosHint").hidden = false;
   var canSW = "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost");
-  if (canSW) navigator.serviceWorker.register("sw.js").catch(function () {});
+  if (canSW) navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(function () {});
 
   /* ---------- Updates ---------- */
   var lastCheck = 0, dismissed = null;
@@ -559,7 +559,7 @@
   }
   function checkUpdate(manual) {
     if (APP_VERSION === "dev") { if (manual) toast("Entwicklungsversion – keine Updates"); return; }
-    if (!manual && Date.now() - lastCheck < 5 * 60000) return;
+    if (!manual && Date.now() - lastCheck < 15000) return;
     lastCheck = Date.now();
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
@@ -586,17 +586,27 @@
   $("btnCheckUpdate").addEventListener("click", function () { checkUpdate(true); });
   $("btnUpdate").addEventListener("click", applyUpdate);
   $("updateLater").addEventListener("click", function () { dismissed = $("updateBar").getAttribute("data-version"); $("updateBar").hidden = true; });
+  // iOS löst beim Zurückkehren in die installierte App nicht immer dasselbe Ereignis aus – daher mehrere
   document.addEventListener("visibilitychange", function () { if (!document.hidden) checkUpdate(false); });
+  window.addEventListener("pageshow", function () { checkUpdate(false); });
+  window.addEventListener("focus", function () { checkUpdate(false); });
   window.addEventListener("online", function () { checkUpdate(false); });
   setInterval(function () { if (!document.hidden) checkUpdate(false); }, 30 * 60000);
-  try {
-    var from = sessionStorage.getItem("stadtsammler-updated");
-    if (from) {
-      sessionStorage.removeItem("stadtsammler-updated");
-      if (newer(APP_VERSION, from)) setTimeout(function () { toast("✓ Aktualisiert auf Version " + APP_VERSION, 3500); }, 400);
-      else setTimeout(function () { toast("Update noch nicht abrufbar – bitte in ein paar Minuten erneut versuchen", 4500); }, 400);
+  // Zeigen, wenn die App seit dem letzten Öffnen neuer geworden ist – auch wenn iOS sie still neu geladen hat
+  (function () {
+    var seen = null, tried = null;
+    try {
+      seen = localStorage.getItem("stadtsammler-seen-version");
+      tried = sessionStorage.getItem("stadtsammler-updated"); sessionStorage.removeItem("stadtsammler-updated");
+    } catch (e) { /* egal */ }
+    if (APP_VERSION === "dev") return;
+    if ((seen && newer(APP_VERSION, seen)) || (tried && newer(APP_VERSION, tried))) {
+      setTimeout(function () { toast("✓ Aktualisiert auf Version " + APP_VERSION, 4000); }, 500);
+    } else if (tried) {
+      setTimeout(function () { toast("Update noch nicht abrufbar – bitte in ein paar Minuten erneut versuchen", 4500); }, 500);
     }
-  } catch (e) { /* egal */ }
+    try { localStorage.setItem("stadtsammler-seen-version", APP_VERSION); } catch (e) { /* egal */ }
+  })();
 
   /* ---------- Layout fixieren: kein Seiten-Zoom auf dem Handy ---------- */
   ["gesturestart", "gesturechange", "gestureend"].forEach(function (ev) {
