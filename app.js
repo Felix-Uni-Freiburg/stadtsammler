@@ -578,9 +578,11 @@
   function applyUpdate() {
     $("btnUpdate").disabled = true; $("btnUpdate").textContent = "Lädt …";
     try { sessionStorage.setItem("stadtsammler-updated", APP_VERSION); } catch (e) { /* egal */ }
-    var p = canSW ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }) : Promise.resolve();
-    var go = function () { location.reload(); };
-    p.then(go, go);
+    // Nicht auf den Service Worker warten: auf iOS kommt dessen Antwort teils nie zurück.
+    // Neu laden reicht, weil der Service Worker online immer die neuesten Dateien holt.
+    var done = false, go = function () { if (done) return; done = true; location.reload(); };
+    if (canSW) navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update().then(go, go); }).catch(go);
+    setTimeout(go, 800);
   }
   $("verInfo").textContent = "Version " + APP_VERSION;
   $("btnCheckUpdate").addEventListener("click", function () { checkUpdate(true); });

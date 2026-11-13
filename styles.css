@@ -69,8 +69,6 @@ body[data-tab="stats"] #view-stats, body[data-tab="more"] #view-more { display: 
   .panel-tabs { display: none; }
   body:not([data-tab="map"]) #panel { display: flex; }
   body:not([data-tab="map"]) #view-map { visibility: hidden; }
-  main { position: static; }
-  #panel { bottom: 0; }
   body[data-tab="map"] #view-list { display: none; }
   /* Tab-Leiste wie in einer iOS-App: schwebt über dem Inhalt, milchglasartig */
   .bottomnav {
@@ -149,7 +147,7 @@ path.me { fill: #3b9dff; stroke: #fff; stroke-width: 2.5; fill-opacity: 1; }
 select { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; }
 .group { font-size: 12px; font-weight: 700; color: var(--muted); padding: 14px 4px 5px; display: flex; justify-content: space-between; }
 .city-row { display: flex; align-items: center; gap: 12px; padding: 9px 6px; border-radius: 12px; cursor: pointer; }
-.city-row:hover { background: var(--surface); }
+@media (hover: hover) { .city-row:hover { background: var(--surface); } }
 .check {
   width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); flex: none;
   display: grid; place-items: center; color: transparent; font-weight: 900; font-size: 15px; transition: .15s;
@@ -253,3 +251,7 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 .update-text small { display: block; color: var(--muted); font-size: 12.5px; }
 .update-later { width: 34px; height: 34px; font-size: 22px; color: var(--muted); flex: none; }
 .btn:disabled { opacity: .6; }
+
+/* Installierte iOS-App: iOS meldet als Fensterhöhe den Bildschirm minus Statusleiste,
+   obwohl die App den ganzen Bildschirm nutzt – sonst bleibt unten ein leerer Streifen */
+html.standalone, html.standalone body { position: relative; inset: auto; height: 100lvh; }
