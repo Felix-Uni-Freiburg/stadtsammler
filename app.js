@@ -1,8 +1,9 @@
 (function () {
   "use strict";
-  var CITIES = window.CITIES, STATES = window.STATES, GERMANY = window.GERMANY;
+  var ALL = window.CITIES, STATES = window.STATES, GERMANY = window.GERMANY;
+  var CITIES = ALL.filter(function (c) { return !c.bonus; }); // nur Großstädte: Fortschritt, Prozent, Bundesländer
   var BY_ID = {};
-  CITIES.forEach(function (c) { BY_ID[c.id] = c; });
+  ALL.forEach(function (c) { BY_ID[c.id] = c; });
   var TOTAL_POP = CITIES.reduce(function (s, c) { return s + c.pop; }, 0);
   var $ = function (id) { return document.getElementById(id); };
   var nf = new Intl.NumberFormat("de-DE");
@@ -24,7 +25,8 @@
       var v = raw.visited[id] || {};
       out.visited[id] = {
         date: /^\d{4}-\d{2}-\d{2}$/.test(v.date || "") ? v.date : "",
-        note: String(v.note || "").slice(0, 500)
+        note: String(v.note || "").slice(0, 500),
+        fromWish: v.fromWish ? 1 : 0
       };
     });
     Object.keys(raw.wish || {}).forEach(function (id) { if (BY_ID[id]) out.wish[id] = 1; });
@@ -34,6 +36,7 @@
     try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { toast("Speichern nicht möglich"); }
   }
   var isVisited = function (id) { return !!data.visited[id]; };
+  function mainVisited() { return Object.keys(data.visited).filter(function (id) { return !BY_ID[id].bonus; }); }
 
   /* ---------- Hilfen ---------- */
   function esc(s) { return String(s).replace(/[&<>"]/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]; }); }
@@ -59,18 +62,29 @@
   var NORD = ["kiel", "luebeck", "rostock", "hamburg", "bremen", "bremerhaven", "oldenburg"];
   var OST = CITIES.filter(function (c) { return ["SN", "ST", "TH", "MV", "BB"].indexOf(c.state) >= 0; }).map(function (c) { return c.id; });
   var setBadge = function (ids) { return function () { return [ids.filter(isVisited).length, ids.length]; }; };
-  var countBadge = function (n) { return function () { return [Math.min(n, Object.keys(data.visited).length), n]; }; };
+  var countBadge = function (n) { return function () { return [Math.min(n, mainVisited().length), n]; }; };
+  // Besuche pro Tag / Jahr aus den Besuchsdaten
+  function maxPer(len) {
+    var m = {}, best = 0;
+    Object.keys(data.visited).forEach(function (id) {
+      var d = data.visited[id].date; if (!d) return;
+      var k = d.slice(0, len); m[k] = (m[k] || 0) + 1; best = Math.max(best, m[k]);
+    });
+    return best;
+  }
+  var HAUPTSTAEDTE = ["kiel", "schwerin", "hamburg", "bremen", "hannover", "berlin", "potsdam", "magdeburg", "duesseldorf",
+    "erfurt", "dresden", "wiesbaden", "mainz", "saarbruecken", "stuttgart", "muenchen"];
+  // group: Abschnitt auf der Erfolge-Seite; cities: Städte, die in der Detailansicht aufgelistet werden
   var BADGES = [
-    { id: "first", em: "👣", name: "Erste Schritte", desc: "Deine erste Großstadt", fn: countBadge(1) },
-    { id: "c10", em: "🎒", name: "Unterwegs", desc: "10 Großstädte besucht", fn: countBadge(10) },
-    { id: "c25", em: "🚆", name: "Vielfahrer", desc: "25 Großstädte besucht", fn: countBadge(25) },
-    { id: "half", em: "⚖️", name: "Halbzeit", desc: "Die Hälfte aller Großstädte", fn: countBadge(Math.ceil(CITIES.length / 2)) },
-    { id: "all", em: "👑", name: "Alle " + CITIES.length, desc: "Jede deutsche Großstadt", fn: countBadge(CITIES.length) },
-    { id: "mio", em: "🏙️", name: "Millionenclub", desc: "Berlin, Hamburg, München, Köln", fn: setBadge(["berlin", "hamburg", "muenchen", "koeln"]) },
-    { id: "states", em: "🗺️", name: "16 von 16", desc: "Eine Stadt in jedem Bundesland", fn: function () {
+    { group: "Meilensteine", id: "first", em: "👣", name: "Erste Schritte", desc: "Deine erste Großstadt", fn: countBadge(1) },
+    { group: "Meilensteine", id: "c10", em: "🎒", name: "Unterwegs", desc: "10 Großstädte besucht", fn: countBadge(10) },
+    { group: "Meilensteine", id: "c25", em: "🚆", name: "Vielfahrer", desc: "25 Großstädte besucht", fn: countBadge(25) },
+    { group: "Meilensteine", id: "half", em: "⚖️", name: "Halbzeit", desc: "Die Hälfte aller Großstädte", fn: countBadge(Math.ceil(CITIES.length / 2)) },
+    { group: "Meilensteine", id: "all", em: "👑", name: "Alle " + CITIES.length, desc: "Jede deutsche Großstadt", fn: countBadge(CITIES.length) },
+    { group: "Meilensteine", id: "states", em: "🗺️", name: "16 von 16", desc: "Eine Stadt in jedem Bundesland", fn: function () {
         var s = {}; Object.keys(data.visited).forEach(function (id) { s[BY_ID[id].state] = 1; }); return [Object.keys(s).length, 16];
       } },
-    { id: "land", em: "🏅", name: "Landesmeister", desc: "Ein Flächenland komplett", fn: function () {
+    { group: "Meilensteine", id: "land", em: "🏅", name: "Landesmeister", desc: "Alle Großstädte eines Flächenlands", fn: function () {
         var best = 0;
         Object.keys(STATES).forEach(function (st) {
           var cs = CITIES.filter(function (c) { return c.state === st; });
@@ -79,13 +93,45 @@
         });
         return [Math.floor(best * 100), 100, "%"];
       } },
-    { id: "ruhr", em: "⚒️", name: "Pott-Profi", desc: "Alle 13 Ruhrgebiets-Städte", fn: setBadge(RUHR) },
-    { id: "rhein", em: "🚢", name: "Rheintour", desc: "Alle Großstädte am Rhein", fn: setBadge(RHEIN) },
-    { id: "nord", em: "⚓", name: "Nordlicht", desc: "Alle Großstädte im hohen Norden", fn: setBadge(NORD) },
-    { id: "ost", em: "🧭", name: "Ost-Runde", desc: "Alle Großstädte der fünf Ost-Länder", fn: setBadge(OST) },
-    { id: "ecken", em: "📐", name: "Vier Ecken", desc: "Kiel, Cottbus, Freiburg, Aachen", fn: setBadge(["kiel", "cottbus", "freiburg-im-breisgau", "aachen"]) },
-    { id: "staat", em: "🏛️", name: "Stadtstaaten", desc: "Berlin, Hamburg und Bremen", fn: setBadge(["berlin", "hamburg", "bremen"]) }
+
+    { group: "Regionen", id: "mio", em: "🏙️", name: "Millionenclub", desc: "Berlin, Hamburg, München, Köln", cities: ["berlin", "hamburg", "muenchen", "koeln"] },
+    { group: "Regionen", id: "staat", em: "🏢", name: "Stadtstaaten", desc: "Berlin, Hamburg und Bremen", cities: ["berlin", "hamburg", "bremen"] },
+    { group: "Regionen", id: "ruhr", em: "⚒️", name: "Pott-Profi", desc: "Alle 13 Ruhrgebiets-Städte", cities: RUHR },
+    { group: "Regionen", id: "rhein", em: "🚢", name: "Rheintour", desc: "Alle Großstädte am Rhein", cities: RHEIN },
+    { group: "Regionen", id: "nord", em: "⚓", name: "Nordlicht", desc: "Alle Großstädte im hohen Norden", cities: NORD },
+    { group: "Regionen", id: "ost", em: "🧭", name: "Ost-Runde", desc: "Alle Großstädte der fünf Ost-Länder", cities: OST },
+    { group: "Regionen", id: "ecken", em: "📐", name: "Vier Ecken", desc: "Kiel, Cottbus, Freiburg, Aachen", cities: ["kiel", "cottbus", "freiburg-im-breisgau", "aachen"] },
+
+    { group: "Themen-Touren", id: "hauptst", em: "🏛️", name: "Landeshauptstädte", desc: "Alle 16 – inklusive Schwerin", cities: HAUPTSTAEDTE },
+    { group: "Themen-Touren", id: "hanse", em: "⛵", name: "Hanse-Tour", desc: "Acht alte Hansestädte von Bremen bis Greifswald",
+      cities: ["hamburg", "luebeck", "bremen", "rostock", "wismar", "stralsund", "greifswald", "lueneburg"] },
+    { group: "Themen-Touren", id: "ostsee", em: "🌊", name: "Ostseeküste", desc: "Von Flensburg bis Greifswald",
+      cities: ["flensburg", "kiel", "luebeck", "wismar", "rostock", "stralsund", "greifswald"] },
+    { group: "Themen-Touren", id: "welterbe", em: "🏰", name: "Welterbe-Städte", desc: "Altstädte und Ensembles mit UNESCO-Titel",
+      cities: ["bamberg", "regensburg", "luebeck", "stralsund", "wismar", "quedlinburg", "goslar", "weimar"] },
+    { group: "Themen-Touren", id: "uni", em: "🎓", name: "Unistadt-Klassiker", desc: "Sechs traditionsreiche Studentenstädte",
+      cities: ["heidelberg", "tuebingen", "goettingen", "marburg", "freiburg-im-breisgau", "jena"] },
+    { group: "Themen-Touren", id: "grenze", em: "🛂", name: "Grenzgänger", desc: "Acht Städte direkt an der Grenze",
+      cities: ["flensburg", "aachen", "saarbruecken", "freiburg-im-breisgau", "konstanz", "passau", "goerlitz", "frankfurt-oder"] },
+    { group: "Themen-Touren", id: "bodensee", em: "🏔️", name: "Bodensee-Runde", desc: "Konstanz, Friedrichshafen und Lindau",
+      cities: ["konstanz", "friedrichshafen", "lindau-bodensee"] },
+    { group: "Themen-Touren", id: "frankfurts", em: "🌭", name: "Beide Frankfurts", desc: "Am Main und an der Oder",
+      cities: ["frankfurt-am-main", "frankfurt-oder"] },
+    { group: "Themen-Touren", id: "nordsued", em: "📏", name: "Ganz oben, ganz unten", desc: "Flensburg im Norden und Lindau im Süden",
+      cities: ["flensburg", "lindau-bodensee"] },
+
+    { group: "Reise-Stil", id: "tag", em: "⚡", name: "Tagestour", desc: "3 Städte am selben Tag", fn: function () { return [Math.min(3, maxPer(10)), 3]; } },
+    { group: "Reise-Stil", id: "jahr", em: "📅", name: "Städte-Jahr", desc: "10 Städte im selben Kalenderjahr", fn: function () { return [Math.min(10, maxPer(4)), 10]; } },
+    { group: "Reise-Stil", id: "wunsch", em: "💫", name: "Wünsche erfüllt", desc: "5 Städte von deiner Wunschliste besucht", fn: function () {
+        return [Math.min(5, Object.keys(data.visited).filter(function (id) { return data.visited[id].fromWish; }).length), 5];
+      } },
+    { group: "Reise-Stil", id: "notiz", em: "📝", name: "Chronist", desc: "10 Notizen zu deinen Besuchen", fn: function () {
+        return [Math.min(10, Object.keys(data.visited).filter(function (id) { return data.visited[id].note.trim(); }).length), 10];
+      } }
   ];
+  BADGES.forEach(function (b) { if (b.cities && !b.fn) b.fn = setBadge(b.cities); });
+  BADGES.forEach(function (b) { (b.cities || []).forEach(function (id) { if (!BY_ID[id]) throw new Error("Unbekannte Stadt in Erfolg " + b.id + ": " + id); }); });
+  function badgesFor(id) { return BADGES.filter(function (b) { return b.cities && b.cities.indexOf(id) >= 0; }); }
   function doneBadges() {
     return BADGES.filter(function (b) { var p = b.fn(); return p[0] >= p[1]; }).map(function (b) { return b.id; });
   }
@@ -131,10 +177,10 @@
 
   var markers = {}, hits = {};
   var baseR = function (c) { return 3.5 + Math.sqrt(c.pop / 1e6) * 5; };
-  var bySize = CITIES.slice().sort(function (a, b) { return b.pop - a.pop; });
+  var bySize = ALL.slice().sort(function (a, b) { return b.pop - a.pop; });
   bySize.forEach(function (c) {
-    var r = baseR(c), tier = c.pop >= 600000 ? 1 : c.pop >= 250000 ? 2 : 3;
-    var vis = L.circleMarker([c.lat, c.lng], { radius: r, className: "city", interactive: false }).addTo(map);
+    var r = baseR(c), tier = c.bonus ? 3 : c.pop >= 600000 ? 1 : c.pop >= 250000 ? 2 : 3;
+    var vis = L.circleMarker([c.lat, c.lng], { radius: r, className: "city" + (c.bonus ? " bonus" : ""), interactive: false }).addTo(map);
     vis.bindTooltip(shortName(c.name), { permanent: true, direction: "right", offset: [r * 1.5 + 1, 0], className: "city-label tier-" + tier });
     markers[c.id] = vis;
   });
@@ -149,7 +195,7 @@
     el.classList.toggle("z0", d < 0.9);
     el.classList.toggle("z1", d >= 0.9 && d < 2);
     var k = 1 + Math.max(0, Math.min(d, 3)) * 0.3;
-    CITIES.forEach(function (c) { markers[c.id].setRadius(baseR(c) * k); hits[c.id].setRadius(baseR(c) * k + 6); });
+    ALL.forEach(function (c) { markers[c.id].setRadius(baseR(c) * k); hits[c.id].setRadius(baseR(c) * k + 6); });
   }
   map.on("zoomend", updateZoomClass);
   var resizeTimer, lastSize = "";
@@ -176,7 +222,7 @@
     return [cs.filter(function (c) { return isVisited(c.id); }).length, cs.length];
   }
   function paintMap() {
-    CITIES.forEach(function (c) {
+    ALL.forEach(function (c) {
       var el = markers[c.id].getElement(); if (!el) return;
       el.classList.toggle("visited", isVisited(c.id));
       el.classList.toggle("wish", !isVisited(c.id) && !!data.wish[c.id]);
@@ -194,8 +240,9 @@
   function renderList() {
     var q = $("search").value.trim().toLowerCase(), sort = $("sort").value;
     if (sort === "dist" && !userPos) sort = "pop";
-    var rows = CITIES.filter(function (c) {
+    var rows = ALL.filter(function (c) {
       if (q && c.name.toLowerCase().indexOf(q) < 0 && STATES[c.state].toLowerCase().indexOf(q) < 0) return false;
+      if (filter === "bonus") return c.bonus;
       if (filter === "visited") return isVisited(c.id);
       if (filter === "open") return !isVisited(c.id);
       if (filter === "wish") return !!data.wish[c.id] && !isVisited(c.id);
@@ -217,13 +264,14 @@
       var side = userPos ? Math.round(km(userPos, c)) + " km" : (v && v.date ? fmtDate(v.date) : "");
       html += '<div class="city-row' + (v ? " visited" : "") + (data.wish[c.id] ? " wish" : "") + '" data-id="' + c.id + '">' +
         '<button class="check" data-check="' + c.id + '" aria-label="' + esc(c.name) + ' als besucht markieren">✓</button>' +
-        '<div class="city-main"><b>' + esc(c.name) + "</b><span>" + (sort === "state" ? "" : esc(STATES[c.state]) + " · ") + fmtPop(c.pop) + " Einw.</span></div>" +
+        '<div class="city-main"><b>' + esc(c.name) + (c.bonus ? ' <i class="tag">Bonus</i>' : "") + "</b><span>" + (sort === "state" ? "" : esc(STATES[c.state]) + " · ") + fmtPop(c.pop) + " Einw.</span></div>" +
         '<div class="city-side">' + side + "</div></div>";
     });
     if (!rows.length) {
       html = '<div class="empty">' + (filter === "wish" ? "Noch nichts auf der Wunschliste. Öffne eine Stadt und tippe auf „♡ Wunschliste“." :
         filter === "visited" ? "Noch keine Stadt abgehakt – los geht’s!" : "Keine Stadt gefunden.") + "</div>";
     }
+    if (filter === "bonus" && rows.length) html = '<div class="hint">Bonusstädte sind keine Großstädte. Sie zählen nicht zum Fortschritt, aber für Erfolge wie Landeshauptstädte, Hanse-Tour oder Welterbe.</div>' + html;
     $("list").innerHTML = html;
   }
   $("list").addEventListener("click", function (e) {
@@ -246,7 +294,7 @@
 
   /* ---------- Statistik ---------- */
   function renderStats() {
-    var ids = Object.keys(data.visited), n = ids.length, pct = Math.round(n / CITIES.length * 100);
+    var ids = mainVisited(), n = ids.length, pct = Math.round(n / CITIES.length * 100);
     if (n > 0 && pct === 0) pct = 1;
     $("pillCount").textContent = n + " / " + CITIES.length;
     $("pillPct").textContent = pct + " %";
@@ -257,7 +305,7 @@
 
     var pop = ids.reduce(function (s, id) { return s + BY_ID[id].pop; }, 0);
     var st = {}; ids.forEach(function (id) { st[BY_ID[id].state] = 1; });
-    var years = {}; ids.forEach(function (id) { var d = data.visited[id].date; if (d) years[d.slice(0, 4)] = (years[d.slice(0, 4)] || 0) + 1; });
+    var years = {}; Object.keys(data.visited).forEach(function (id) { var d = data.visited[id].date; if (d) years[d.slice(0, 4)] = (years[d.slice(0, 4)] || 0) + 1; });
     var thisYear = years[String(new Date().getFullYear())] || 0;
     $("tiles").innerHTML =
       tile(Object.keys(st).length + " / 16", "Bundesländer") +
@@ -265,11 +313,13 @@
       tile(thisYear, "neue Städte dieses Jahr") +
       tile(Object.keys(data.wish).filter(function (id) { return !isVisited(id); }).length, "auf der Wunschliste");
 
-    var done = 0;
+    var done = 0, lastGroup = null;
     $("badges").innerHTML = BADGES.map(function (b) {
       var p = b.fn(), ok = p[0] >= p[1]; if (ok) done++;
-      return '<div class="badge' + (ok ? " done" : "") + '"><div class="em">' + b.em + "</div><em>" + (ok ? "✓" : p[0] + (p[2] || "") + " / " + p[1] + (p[2] || "")) + "</em><b>" +
-        esc(b.name) + "</b><span>" + esc(b.desc) + '</span><div class="bar"><i style="width:' + Math.min(100, p[0] / p[1] * 100) + '%"></i></div></div>';
+      var head = b.group !== lastGroup ? '<div class="badge-group">' + esc(b.group) + "</div>" : "";
+      lastGroup = b.group;
+      return head + '<button class="badge' + (ok ? " done" : "") + '" data-badge="' + b.id + '"><div class="em">' + b.em + "</div><em>" + (ok ? "✓" : p[0] + (p[2] || "") + " / " + p[1] + (p[2] || "")) + "</em><b>" +
+        esc(b.name) + "</b><span>" + esc(b.desc) + '</span><div class="bar"><i style="width:' + Math.min(100, p[0] / p[1] * 100) + '%"></i></div></button>';
     }).join("");
     $("badgeCount").textContent = "· " + done + " von " + BADGES.length;
 
@@ -280,7 +330,7 @@
           '</span><div class="bar"><i style="width:' + (x[1][0] / x[1][1] * 100) + '%"></i></div></div>';
       }).join("");
 
-    var recent = ids.filter(function (id) { return data.visited[id].date; })
+    var recent = Object.keys(data.visited).filter(function (id) { return data.visited[id].date; })
       .sort(function (a, b) { return data.visited[b].date.localeCompare(data.visited[a].date); }).slice(0, 6);
     $("recent").innerHTML = recent.length ? recent.map(function (id) {
       return '<div class="recent-row" data-id="' + id + '"><b>' + esc(BY_ID[id].name) + "</b><span>" + fmtDate(data.visited[id].date) + "</span></div>";
@@ -289,7 +339,34 @@
   function tile(v, l) { return '<div class="tile"><b>' + v + "</b><span>" + l + "</span></div>"; }
   $("recent").addEventListener("click", function (e) { var r = e.target.closest("[data-id]"); if (r) { go("map"); openSheet(r.getAttribute("data-id")); focusCity(r.getAttribute("data-id")); } });
 
-  function refresh() { paintMap(); renderList(); renderStats(); if (sheetId) fillSheet(); }
+  /* ---------- Erfolgs-Details ---------- */
+  var openBadge = null;
+  function showBadge(id) {
+    var b = BADGES.filter(function (x) { return x.id === id; })[0]; if (!b) return;
+    openBadge = id;
+    var p = b.fn(), ok = p[0] >= p[1];
+    $("bdEm").textContent = b.em;
+    $("bdName").textContent = b.name;
+    $("bdDesc").textContent = b.desc;
+    $("bdState").textContent = ok ? "✓ Geschafft" : p[0] + (p[2] || "") + " von " + p[1] + (p[2] || "");
+    $("bdState").className = ok ? "bd-state done" : "bd-state";
+    $("bdList").innerHTML = b.cities ? b.cities.slice().sort(function (x, y) { return isVisited(y) - isVisited(x) || BY_ID[y].pop - BY_ID[x].pop; }).map(function (cid) {
+      var c = BY_ID[cid], v = isVisited(cid);
+      return '<button class="bd-city' + (v ? " visited" : "") + '" data-city="' + cid + '"><span class="check">✓</span><b>' + esc(c.name) +
+        (c.bonus ? ' <i class="tag">Bonus</i>' : "") + "</b><small>" + (v ? (data.visited[cid].date ? fmtDate(data.visited[cid].date) : "besucht") : "fehlt noch") + "</small></button>";
+    }).join("") : '<p class="bd-hint">' + (ok ? "Stark – den hast du!" : "Zählt automatisch mit, sobald du Städte abhakst.") + "</p>";
+    $("badgeDetail").hidden = false;
+  }
+  function closeBadge() { openBadge = null; $("badgeDetail").hidden = true; }
+  $("badges").addEventListener("click", function (e) { var b = e.target.closest("[data-badge]"); if (b) showBadge(b.getAttribute("data-badge")); });
+  $("bdClose").addEventListener("click", closeBadge);
+  $("badgeDetail").addEventListener("click", function (e) {
+    if (e.target === $("badgeDetail")) { closeBadge(); return; }
+    var c = e.target.closest("[data-city]"); if (!c) return;
+    var id = c.getAttribute("data-city"); closeBadge(); go("map"); openSheet(id); focusCity(id);
+  });
+
+  function refresh() { paintMap(); renderList(); renderStats(); if (sheetId) fillSheet(); if (openBadge) showBadge(openBadge); }
 
   /* ---------- Besuch umschalten ---------- */
   function toggleVisited(id) {
@@ -298,14 +375,14 @@
       if (data.visited[id].note && !confirm("„" + BY_ID[id].name + "“ wirklich abwählen? Deine Notiz geht dabei verloren.")) return;
       delete data.visited[id];
     } else {
-      data.visited[id] = { date: today(), note: "" };
+      data.visited[id] = { date: today(), note: "", fromWish: data.wish[id] ? 1 : 0 };
       delete data.wish[id];
       var after = doneBadges().filter(function (b) { return before.indexOf(b) < 0; });
       if (after.length) {
         var b = BADGES.filter(function (x) { return x.id === after[0]; })[0];
         toast(b.em + " Abzeichen freigeschaltet: " + b.name, 4000); confetti(140);
       } else {
-        toast("✓ " + shortName(BY_ID[id].name) + " – Stadt Nr. " + Object.keys(data.visited).length); confetti(40);
+        toast("✓ " + shortName(BY_ID[id].name) + (BY_ID[id].bonus ? " – Bonusstadt" : " – Großstadt Nr. " + mainVisited().length)); confetti(40);
       }
     }
     save(); refresh();
@@ -329,7 +406,13 @@
   function fillSheet() {
     var c = BY_ID[sheetId], v = data.visited[sheetId];
     $("sName").textContent = c.name;
-    $("sMeta").textContent = STATES[c.state] + " · " + fmtPop(c.pop) + " Einwohner" + (userPos ? " · " + Math.round(km(userPos, c)) + " km entfernt" : "");
+    $("sMeta").textContent = (c.bonus ? "Bonusstadt · " : "") + STATES[c.state] + " · " + fmtPop(c.pop) + " Einwohner" + (userPos ? " · " + Math.round(km(userPos, c)) + " km entfernt" : "");
+    var bs = badgesFor(c.id);
+    $("sBadges").innerHTML = bs.map(function (b) {
+      var p = b.fn(), ok = p[0] >= p[1];
+      return '<button class="chip-badge' + (ok ? " done" : "") + '" data-badge="' + b.id + '">' + b.em + " " + esc(b.name) + " <small>" + p[0] + "/" + p[1] + "</small></button>";
+    }).join("");
+    $("sBadges").hidden = !bs.length;
     $("sToggle").textContent = v ? "✓ Besucht – tippen zum Abwählen" : "Ich war hier";
     $("sToggle").classList.toggle("is-visited", !!v);
     $("sVisitedFields").hidden = !v;
@@ -343,6 +426,7 @@
     toggleVisited(sheetId); clearTimeout(keepTimer); keepTimer = setTimeout(keepCityVisible, 60);
   });
   $("sheetClose").addEventListener("click", closeSheet);
+  $("sBadges").addEventListener("click", function (e) { var b = e.target.closest("[data-badge]"); if (b) showBadge(b.getAttribute("data-badge")); });
   $("sDate").addEventListener("change", function () {
     if (!data.visited[sheetId]) return;
     var d = $("sDate").value;
@@ -401,7 +485,7 @@
   $("btnNearby").addEventListener("click", function () {
     locate(function () {
       $("sort").value = "dist"; renderList();
-      var sorted = CITIES.slice().sort(function (a, b) { return km(userPos, a) - km(userPos, b); });
+      var sorted = ALL.slice().sort(function (a, b) { return km(userPos, a) - km(userPos, b); });
       var here = sorted[0], dHere = km(userPos, here);
       var target = here;
       if (dHere <= 15 && !isVisited(here.id)) toast("📍 Du bist in " + shortName(here.name) + " – gleich abhaken?", 4500);
@@ -414,7 +498,7 @@
     });
   });
   $("btnRandom").addEventListener("click", function () {
-    var wish = CITIES.filter(function (c) { return !isVisited(c.id) && data.wish[c.id]; });
+    var wish = ALL.filter(function (c) { return !isVisited(c.id) && data.wish[c.id]; });
     var open = CITIES.filter(function (c) { return !isVisited(c.id); });
     var pool = wish.length && Math.random() < 0.5 ? wish : open;
     if (!pool.length) { toast("Du hast schon alle Städte besucht 👑"); return; }
@@ -452,7 +536,7 @@
       g.fillStyle = v ? "#ffc93c" : "#5b6a9c"; g.globalAlpha = v ? 1 : 0.55; g.fill();
       g.globalAlpha = 1; g.shadowBlur = 0;
     });
-    var n = Object.keys(data.visited).length, st = {};
+    var n = mainVisited().length, st = {};
     Object.keys(data.visited).forEach(function (id) { st[BY_ID[id].state] = 1; });
     g.textAlign = "center"; g.fillStyle = "#ffc93c"; g.font = "800 150px -apple-system, 'Segoe UI', Roboto, sans-serif";
     g.fillText(n + " / " + CITIES.length, W / 2, 190);

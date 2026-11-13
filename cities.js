@@ -1,4 +1,4 @@
-// Deutsche Großstädte (ab 100.000 Einwohner). Einwohnerzahlen gerundet in Tausend (Stand ca. 2023).
+// Deutsche Großstädte (ab 100.000 Einwohner) plus einige Bonusstädte für Erfolge. Einwohnerzahlen gerundet in Tausend (Stand ca. 2023).
 // [Name, Bundesland, Einwohner in Tsd., Breite, Länge]
 window.CITIES = [
   ["Berlin", "BE", 3755, 52.52, 13.405],
@@ -84,12 +84,33 @@ window.CITIES = [
   ["Hanau", "HE", 101, 50.134, 8.917],
   ["Kaiserslautern", "RP", 101, 49.444, 7.769],
   ["Cottbus", "BB", 100, 51.756, 14.333]
-].map(function (c) {
+].concat([
+  // Bonusstädte: keine Großstädte, aber Teil einzelner Erfolge (Landeshauptstädte, Hanse, Welterbe …).
+  // Sie zählen nicht zu den Großstädten und nicht in den Fortschritt.
+  ["Schwerin", "MV", 98, 53.629, 11.414, 1],
+  ["Flensburg", "SH", 92, 54.783, 9.436, 1],
+  ["Tübingen", "BW", 92, 48.521, 9.057, 1],
+  ["Konstanz", "BW", 86, 47.663, 9.175, 1],
+  ["Bamberg", "BY", 79, 49.898, 10.902, 1],
+  ["Lüneburg", "NI", 78, 53.248, 10.408, 1],
+  ["Marburg", "HE", 77, 50.81, 8.771, 1],
+  ["Weimar", "TH", 65, 50.98, 11.329, 1],
+  ["Friedrichshafen", "BW", 62, 47.654, 9.479, 1],
+  ["Greifswald", "MV", 60, 54.093, 13.387, 1],
+  ["Stralsund", "MV", 59, 54.309, 13.082, 1],
+  ["Frankfurt (Oder)", "BB", 57, 52.342, 14.55, 1],
+  ["Görlitz", "SN", 56, 51.153, 14.987, 1],
+  ["Passau", "BY", 53, 48.575, 13.461, 1],
+  ["Goslar", "NI", 50, 51.906, 10.429, 1],
+  ["Wismar", "MV", 43, 53.893, 11.465, 1],
+  ["Lindau (Bodensee)", "BY", 26, 47.546, 9.684, 1],
+  ["Quedlinburg", "ST", 23, 51.789, 11.147, 1]
+]).map(function (c) {
   return {
     id: c[0].toLowerCase()
       .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
       .replace(/[^a-z]+/g, "-").replace(/^-|-$/g, ""),
-    name: c[0], state: c[1], pop: c[2] * 1000, lat: c[3], lng: c[4]
+    name: c[0], state: c[1], pop: c[2] * 1000, lat: c[3], lng: c[4], bonus: !!c[5]
   };
 });
 
