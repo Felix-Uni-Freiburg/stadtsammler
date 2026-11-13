@@ -109,13 +109,22 @@
   }).addTo(map);
   var bounds = stateLayer.getBounds();
   var baseZoom = 6;
+  // Ränder, die Bedienelemente über der Karte belegen (Handy: Tab-Leiste unten, Knöpfe rechts)
+  function fitPad() {
+    if (isDesktop()) return { tl: [14, 14], br: [14, 14] };
+    var nav = document.querySelector(".bottomnav").offsetHeight || 0;
+    return { tl: [10, 10], br: [52, nav + 10] };
+  }
+  var userMoved = false;
   function fitGermany(animate) {
     if (map._loaded) map.invalidateSize();
+    var pad = fitPad();
     map.setMinZoom(0);
-    map.fitBounds(bounds, { padding: [14, 14], animate: !!animate });
-    baseZoom = map.getBoundsZoom(bounds, false, [14, 14]);
+    map.fitBounds(bounds, { paddingTopLeft: pad.tl, paddingBottomRight: pad.br, animate: !!animate });
+    baseZoom = map.getZoom();
     map.setMinZoom(baseZoom - 0.5);
     map.setMaxZoom(baseZoom + 5);
+    userMoved = false;
     updateZoomClass();
   }
   map.setMaxBounds(bounds.pad(0.5));
@@ -143,10 +152,23 @@
     CITIES.forEach(function (c) { markers[c.id].setRadius(baseR(c) * k); hits[c.id].setRadius(baseR(c) * k + 6); });
   }
   map.on("zoomend", updateZoomClass);
-  var resizeTimer;
+  var resizeTimer, lastSize = "";
+  // iOS meldet die endgültige Fenstergröße der installierten App teils erst nach dem Start (ohne resize-Event)
+  function onMapResize() {
+    var el = map.getContainer(), sz = el.clientWidth + "x" + el.clientHeight;
+    if (!el.clientWidth || sz === lastSize) return;
+    lastSize = sz; map.invalidateSize();
+    if (!userMoved) fitGermany(false);
+  }
+  map.on("dragstart", function () { userMoved = true; });
+  map.on("dblclick", function () { userMoved = true; });
+  map.getContainer().addEventListener("touchstart", function (e) { if (e.touches.length > 1) userMoved = true; }, { passive: true });
+  map.getContainer().addEventListener("wheel", function () { userMoved = true; }, { passive: true });
+  if (window.ResizeObserver) new ResizeObserver(function () { clearTimeout(resizeTimer); resizeTimer = setTimeout(onMapResize, 100); }).observe(map.getContainer());
+  window.addEventListener("pageshow", function () { setTimeout(onMapResize, 50); });
   window.addEventListener("resize", function () {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function () { var atBase = map.getZoom() <= baseZoom + 0.3; map.invalidateSize(); if (atBase) fitGermany(false); }, 200);
+    resizeTimer = setTimeout(onMapResize, 150);
   });
 
   function stateStat(st) {
@@ -300,7 +322,7 @@
   function keepCityVisible() {
     if (!sheetId || isDesktop() || document.body.getAttribute("data-tab") !== "map") return;
     var c = BY_ID[sheetId], pt = map.latLngToContainerPoint([c.lat, c.lng]);
-    var free = map.getSize().y - ($("sheet").offsetHeight - 0) - 40;
+    var free = $("sheet").getBoundingClientRect().top - map.getContainer().getBoundingClientRect().top - 40;
     if (pt.y > free) map.panBy([0, pt.y - free + 30], { duration: 0.35 });
   }
   function closeSheet() { if (!sheetId) return; sheetId = null; $("sheet").hidden = true; paintMap(); }
@@ -341,9 +363,10 @@
     clearTimeout(keepTimer);
     // Auf dem Handy liegt die Stadt-Karte über dem unteren Kartenteil: Ziel in den freien Bereich darüber legen
     if (!isDesktop() && sheetId) {
-      var off = Math.min($("sheet").offsetHeight, map.getSize().y * 0.6) / 2;
+      var off = Math.min(map.getContainer().getBoundingClientRect().bottom - $("sheet").getBoundingClientRect().top, map.getSize().y * 0.7) / 2;
       target = map.unproject(map.project(target, z).add([0, off]), z);
     }
+    userMoved = true;
     map.flyTo(target, z, { duration: 0.7 });
   }
 

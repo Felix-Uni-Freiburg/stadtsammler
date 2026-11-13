@@ -4,7 +4,7 @@
   --accent: #ffc93c; --accent-ink: #1a1400; --accent-text: #ffc93c;
   --state: #18223f; --state-line: #3a4b85;
   --wish: #ff6b9d; --danger: #ff6b6b; --dot: #5b6a9c;
-  --nav-h: 60px; --top-h: 54px;
+  --nav-h: 54px; --top-h: 54px; --statusbar: #0a0f1e;
   --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
   color-scheme: dark;
 }
@@ -18,6 +18,7 @@
 }
 [hidden] { display: none !important; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { background: var(--bg); }
 html, body { height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   background: var(--bg); color: var(--text);
@@ -37,7 +38,7 @@ h3 small { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .topbar {
   height: calc(var(--top-h) + var(--safe-t)); padding: var(--safe-t) 14px 0;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  background: var(--surface); border-bottom: 1px solid var(--line); flex: none; z-index: 5;
+  background: linear-gradient(var(--statusbar) 0 var(--safe-t), var(--surface) var(--safe-t)); border-bottom: 1px solid var(--line); flex: none; z-index: 5;
 }
 .brand { display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; font-weight: 800; font-size: 17px; letter-spacing: -.01em; }
 .logo { width: 24px; height: 24px; flex: none; color: var(--accent); }
@@ -68,14 +69,28 @@ body[data-tab="stats"] #view-stats, body[data-tab="more"] #view-more { display: 
   .panel-tabs { display: none; }
   body:not([data-tab="map"]) #panel { display: flex; }
   body:not([data-tab="map"]) #view-map { visibility: hidden; }
+  main { position: static; }
+  #panel { bottom: 0; }
   body[data-tab="map"] #view-list { display: none; }
+  /* Tab-Leiste wie in einer iOS-App: schwebt über dem Inhalt, milchglasartig */
   .bottomnav {
-    display: flex; flex: none; height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b);
-    background: var(--surface); border-top: 1px solid var(--line); z-index: 5;
+    display: flex; position: absolute; left: 0; right: 0; bottom: 0; z-index: 1000;
+    height: calc(var(--nav-h) + var(--safe-b)); padding: 0 6px var(--safe-b);
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    border-top: .5px solid color-mix(in srgb, var(--line) 80%, transparent);
   }
-  .bottomnav button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .bottomnav button {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px;
+    padding-top: 7px; font-size: 10.5px; font-weight: 600; letter-spacing: .01em; color: var(--muted);
+  }
   .bottomnav button.on { color: var(--accent-text); }
-  .bottomnav svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .bottomnav button:active svg { transform: scale(.88); }
+  .bottomnav svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s; }
+  .bottomnav button.on svg { stroke-width: 2.1; }
+  body { --below: calc(var(--nav-h) + var(--safe-b)); }
+  body .panel-view { padding-bottom: calc(var(--below) + 24px); }
+  body .legend { bottom: calc(var(--below) + 12px); }
   .brand span { font-size: 16px; overflow: hidden; text-overflow: ellipsis; }
   /* unter 16px zoomt iOS beim Antippen von Eingabefeldern in die Seite */
   input, textarea, select { font-size: 16px !important; }
@@ -220,7 +235,7 @@ select { background: var(--surface); border: 1px solid var(--line); border-radiu
 }
 
 .toast {
-  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--nav-h) + var(--safe-b) + 18px); z-index: 1300;
+  position: fixed; left: 50%; transform: translateX(-50%); top: calc(var(--top-h) + var(--safe-t) + 12px); z-index: 1300;
   background: var(--text); color: var(--bg); padding: 11px 18px; border-radius: 99px; font-weight: 700; font-size: 14px;
   box-shadow: 0 8px 30px rgba(0,0,0,.4); max-width: calc(100vw - 32px); text-align: center; animation: up .2s ease-out;
 }
