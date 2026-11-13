@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Stadtsammler – Deutsche Großstädte tracken</title>
 <meta name="description" content="Tracke, in welchen deutschen Großstädten du schon warst.">
 <meta name="theme-color" content="#0a0f1e">
@@ -11,10 +11,11 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Stadtsammler">
 <link rel="stylesheet" href="vendor/leaflet.css">
-<link rel="stylesheet" href="styles.css">
+<!-- Version: bei jedem Release hier (alle ?v=) UND in version.json hochzählen -->
+<link rel="stylesheet" href="styles.css?v=1.1.0">
 </head>
 <body data-tab="map">
 
@@ -102,6 +103,7 @@
     <section id="view-more" class="panel-view">
       <h3>App</h3>
       <div class="card">
+        <button class="row-btn" id="btnCheckUpdate">Nach Updates suchen<small id="verInfo"></small></button>
         <button class="row-btn" id="btnInstall" hidden>App installieren<small>Als App auf dem Startbildschirm, funktioniert auch offline</small></button>
         <div class="row-info" id="iosHint" hidden>Auf dem iPhone installieren<small>In Safari auf „Teilen“ tippen, dann „Zum Home-Bildschirm“.</small></div>
         <label class="row-btn">Design
@@ -150,12 +152,18 @@
   </div>
 </div>
 
+<div id="updateBar" class="update-bar" hidden>
+  <div class="update-text"><b id="updateTitle">Update verfügbar</b><small id="updateNotes"></small></div>
+  <button class="btn primary" id="btnUpdate">Aktualisieren</button>
+  <button class="update-later" id="updateLater" aria-label="Später">×</button>
+</div>
+
 <div id="toast" class="toast" hidden></div>
 <canvas id="confetti"></canvas>
 
 <script src="vendor/leaflet.js"></script>
-<script src="germany.js"></script>
-<script src="cities.js"></script>
-<script src="app.js"></script>
+<script src="germany.js?v=1.1.0"></script>
+<script src="cities.js?v=1.1.0"></script>
+<script src="app.js?v=1.1.0"></script>
 </body>
 </html>

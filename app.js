@@ -6,6 +6,8 @@
   var TOTAL_POP = CITIES.reduce(function (s, c) { return s + c.pop; }, 0);
   var $ = function (id) { return document.getElementById(id); };
   var nf = new Intl.NumberFormat("de-DE");
+  var APP_VERSION = "dev";
+  try { APP_VERSION = new URL(document.currentScript.src).searchParams.get("v") || "dev"; } catch (e) { /* dev */ }
 
   /* ---------- Daten ---------- */
   var KEY = "stadtsammler-v1";
@@ -174,7 +176,7 @@
       if (q && c.name.toLowerCase().indexOf(q) < 0 && STATES[c.state].toLowerCase().indexOf(q) < 0) return false;
       if (filter === "visited") return isVisited(c.id);
       if (filter === "open") return !isVisited(c.id);
-      if (filter === "wish") return !!data.wish[c.id];
+      if (filter === "wish") return !!data.wish[c.id] && !isVisited(c.id);
       return true;
     });
     rows.sort(function (a, b) {
@@ -275,6 +277,7 @@
       delete data.visited[id];
     } else {
       data.visited[id] = { date: today(), note: "" };
+      delete data.wish[id];
       var after = doneBadges().filter(function (b) { return before.indexOf(b) < 0; });
       if (after.length) {
         var b = BADGES.filter(function (x) { return x.id === after[0]; })[0];
@@ -290,11 +293,12 @@
   var sheetId = null;
   function openSheet(id) {
     sheetId = id; fillSheet(); $("sheet").hidden = false; paintMap();
-    if (!isDesktop() && document.body.getAttribute("data-tab") === "map") setTimeout(keepCityVisible, 60);
+    clearTimeout(keepTimer); keepTimer = setTimeout(keepCityVisible, 60);
   }
+  var keepTimer;
   // Auf dem Handy verdeckt die Stadt-Karte den unteren Kartenteil: Stadt bei Bedarf nach oben schieben
   function keepCityVisible() {
-    if (!sheetId) return;
+    if (!sheetId || isDesktop() || document.body.getAttribute("data-tab") !== "map") return;
     var c = BY_ID[sheetId], pt = map.latLngToContainerPoint([c.lat, c.lng]);
     var free = map.getSize().y - ($("sheet").offsetHeight - 0) - 40;
     if (pt.y > free) map.panBy([0, pt.y - free + 30], { duration: 0.35 });
@@ -307,18 +311,21 @@
     $("sToggle").textContent = v ? "✓ Besucht – tippen zum Abwählen" : "Ich war hier";
     $("sToggle").classList.toggle("is-visited", !!v);
     $("sVisitedFields").hidden = !v;
-    if (v) { $("sDate").value = v.date || ""; if (document.activeElement !== $("sNote")) $("sNote").value = v.note || ""; }
+    if (v) { $("sDate").max = today(); $("sDate").value = v.date || ""; if (document.activeElement !== $("sNote")) $("sNote").value = v.note || ""; }
     $("sWish").hidden = !!v;
     $("sWish").textContent = data.wish[sheetId] ? "♥ Gemerkt" : "♡ Wunschliste";
     $("sWish").classList.toggle("on-wish", !!data.wish[sheetId]);
     $("sWiki").href = "https://de.wikipedia.org/wiki/" + encodeURIComponent(c.name.replace(/ /g, "_"));
   }
-  $("sToggle").addEventListener("click", function () { toggleVisited(sheetId); });
+  $("sToggle").addEventListener("click", function () {
+    toggleVisited(sheetId); clearTimeout(keepTimer); keepTimer = setTimeout(keepCityVisible, 60);
+  });
   $("sheetClose").addEventListener("click", closeSheet);
-  $("sDate").max = today();
   $("sDate").addEventListener("change", function () {
     if (!data.visited[sheetId]) return;
-    data.visited[sheetId].date = /^\d{4}-\d{2}-\d{2}$/.test($("sDate").value) ? $("sDate").value : "";
+    var d = $("sDate").value;
+    data.visited[sheetId].date = /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today() ? d : "";
+    if (d && !data.visited[sheetId].date) { $("sDate").value = ""; toast("Das Datum liegt in der Zukunft"); }
     save(); renderList(); renderStats();
   });
   $("sNote").addEventListener("input", function () {
@@ -330,8 +337,14 @@
     save(); refresh();
   });
   function focusCity(id) {
-    var c = BY_ID[id];
-    map.flyTo([c.lat, c.lng], Math.max(map.getZoom(), baseZoom + 1.25), { duration: 0.7 });
+    var c = BY_ID[id], z = Math.max(map.getZoom(), baseZoom + 1.25), target = L.latLng(c.lat, c.lng);
+    clearTimeout(keepTimer);
+    // Auf dem Handy liegt die Stadt-Karte über dem unteren Kartenteil: Ziel in den freien Bereich darüber legen
+    if (!isDesktop() && sheetId) {
+      var off = Math.min($("sheet").offsetHeight, map.getSize().y * 0.6) / 2;
+      target = map.unproject(map.project(target, z).add([0, off]), z);
+    }
+    map.flyTo(target, z, { duration: 0.7 });
   }
 
   /* ---------- Navigation ---------- */
@@ -451,12 +464,16 @@
     var f = $("fileImport").files[0]; if (!f) return;
     var rd = new FileReader();
     rd.onload = function () {
-      try {
-        var inc = sanitize(JSON.parse(rd.result)), n = Object.keys(inc.visited).length;
-        if (!confirm("Backup mit " + n + " besuchten Städten laden? Dein aktueller Stand wird ersetzt.")) return;
-        inc.theme = data.theme; data = inc; save(); closeSheet(); refresh(); toast("Backup geladen");
-      } catch (e) { toast("Das ist keine gültige Backup-Datei"); }
       $("fileImport").value = "";
+      var inc;
+      try {
+        var parsed = JSON.parse(rd.result);
+        if (!parsed || typeof parsed.visited !== "object") throw new Error("Format");
+        inc = sanitize(parsed);
+      } catch (e) { toast("Das ist keine gültige Backup-Datei"); return; }
+      var n = Object.keys(inc.visited).length;
+      if (!confirm("Backup mit " + n + " besuchten Städten laden? Dein aktueller Stand wird ersetzt.")) return;
+      inc.theme = data.theme; data = inc; save(); closeSheet(); refresh(); toast("Backup geladen");
     };
     rd.readAsText(f);
   });
@@ -507,13 +524,68 @@
   $("btnInstall").addEventListener("click", function () { if (installEvt) { installEvt.prompt(); installEvt = null; $("btnInstall").hidden = true; } });
   var standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
   if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone) $("iosHint").hidden = false;
-  if ("serviceWorker" in navigator && location.protocol === "https:" || location.hostname === "localhost") {
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});
+  var canSW = "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost");
+  if (canSW) navigator.serviceWorker.register("sw.js").catch(function () {});
+
+  /* ---------- Updates ---------- */
+  var lastCheck = 0, dismissed = null;
+  function newer(a, b) { // true, wenn Version a neuer ist als b
+    var x = String(a).split("."), y = String(b).split(".");
+    for (var i = 0; i < 3; i++) { var d = (parseInt(x[i], 10) || 0) - (parseInt(y[i], 10) || 0); if (d) return d > 0; }
+    return false;
   }
+  function checkUpdate(manual) {
+    if (APP_VERSION === "dev") { if (manual) toast("Entwicklungsversion – keine Updates"); return; }
+    if (!manual && Date.now() - lastCheck < 5 * 60000) return;
+    lastCheck = Date.now();
+    fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (v) {
+      if (v && v.version && newer(v.version, APP_VERSION)) {
+        if (!manual && dismissed === v.version) return;
+        $("updateTitle").textContent = "Version " + v.version + " ist da";
+        $("updateNotes").textContent = v.notes || "Tippe auf Aktualisieren, um sie zu laden.";
+        $("updateBar").hidden = false;
+        $("verInfo").textContent = "Version " + APP_VERSION + " · Update auf " + v.version + " verfügbar";
+        dismissed = null; $("updateBar").setAttribute("data-version", v.version);
+      } else if (manual) toast("Du hast die neueste Version (" + APP_VERSION + ")");
+    }).catch(function () { if (manual) toast("Keine Verbindung – Update-Suche gerade nicht möglich"); });
+  }
+  function applyUpdate() {
+    $("btnUpdate").disabled = true; $("btnUpdate").textContent = "Lädt …";
+    try { sessionStorage.setItem("stadtsammler-updated", APP_VERSION); } catch (e) { /* egal */ }
+    var p = canSW ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }) : Promise.resolve();
+    var go = function () { location.reload(); };
+    p.then(go, go);
+  }
+  $("verInfo").textContent = "Version " + APP_VERSION;
+  $("btnCheckUpdate").addEventListener("click", function () { checkUpdate(true); });
+  $("btnUpdate").addEventListener("click", applyUpdate);
+  $("updateLater").addEventListener("click", function () { dismissed = $("updateBar").getAttribute("data-version"); $("updateBar").hidden = true; });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) checkUpdate(false); });
+  window.addEventListener("online", function () { checkUpdate(false); });
+  setInterval(function () { if (!document.hidden) checkUpdate(false); }, 30 * 60000);
+  try {
+    var from = sessionStorage.getItem("stadtsammler-updated");
+    if (from) {
+      sessionStorage.removeItem("stadtsammler-updated");
+      if (newer(APP_VERSION, from)) setTimeout(function () { toast("✓ Aktualisiert auf Version " + APP_VERSION, 3500); }, 400);
+      else setTimeout(function () { toast("Update noch nicht abrufbar – bitte in ein paar Minuten erneut versuchen", 4500); }, 400);
+    }
+  } catch (e) { /* egal */ }
+
+  /* ---------- Layout fixieren: kein Seiten-Zoom auf dem Handy ---------- */
+  ["gesturestart", "gesturechange", "gestureend"].forEach(function (ev) {
+    document.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false });
+  });
+  document.addEventListener("touchmove", function (e) { if (e.touches.length > 1 && !e.target.closest("#map")) e.preventDefault(); }, { passive: false });
+  document.addEventListener("dblclick", function (e) { if (!e.target.closest("#map")) e.preventDefault(); });
 
   /* ---------- Start ---------- */
   applyTheme();
   fitGermany(false);
   go("map");
   refresh();
+  setTimeout(function () { checkUpdate(false); }, 1500);
 })();
